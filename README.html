@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Setup — Attendance QR</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<div class="wrap" style="max-width:760px;">
+  <div class="topbar">
+    <a class="brand" href="index.html"><span class="mark"></span> Attendance&nbsp;QR</a>
+  </div>
+
+  <div class="card">
+    <div class="card-title">This site is fully static</div>
+    <div class="card-sub">HTML, CSS and JavaScript only — no build step, hosted for free on GitHub Pages.</div>
+    <p>Everything you're using right now runs in <strong style="color:var(--ink)">Demo Mode</strong>: a sample organization, a simulated Google Calendar, real QR codes, and a live dashboard — all stored locally in your browser, with no Google account involved. That matches how the demo environment was scoped: safe to click around in, one button to reset.</p>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Turning on Production Mode</div>
+    <div class="card-sub">Real Google Calendar + Sheets sync</div>
+    <p>Production Mode needs a Google Cloud project (Calendar API + Sheets API enabled, an OAuth Client ID pointed at your GitHub Pages URL) — that part can run straight from this static site using Google Identity Services in the browser, no server required.</p>
+    <p style="margin-top:10px;">The one piece that genuinely needs a server: automatically detecting a <em>new</em> calendar event the instant it's created. Google's push notifications for Calendar have to call a real server endpoint, which GitHub Pages can't provide. The workaround is either polling the Calendar API while the dashboard tab is open, or adding one small serverless function (Cloudflare Workers, Vercel, or a Supabase Edge Function all have free tiers) that Calendar can notify.</p>
+    <p style="margin-top:10px;">Everything else — reading the master sheet, writing attendance back to Sheets, generating QR tokens — is the same logic already running in Demo Mode, just pointed at real Google APIs instead of local storage.</p>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Deploying this repo</div>
+    <p>Push this folder to a GitHub repository, then in <strong style="color:var(--ink)">Settings → Pages</strong> set the source to your main branch, root folder. GitHub gives you a live URL within a minute. Full steps are in <span class="mono" style="background:var(--mist);padding:2px 6px;border-radius:6px;">README.md</span> at the root of the project.</p>
+  </div>
+
+  <div class="footer-note"><a href="index.html" style="color:var(--blue);font-weight:600;">← Back to app</a></div>
+</div>
+</body>
+</html>

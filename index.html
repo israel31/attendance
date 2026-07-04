@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Attendance QR — Automated Attendance</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<div class="wrap">
+  <div class="topbar">
+    <div class="brand"><span class="mark"></span> Attendance&nbsp;QR</div>
+    <div class="mode-toggle">
+      <button data-mode="demo">Demo Mode</button>
+      <button data-mode="production">Production</button>
+    </div>
+  </div>
+
+  <div id="env-banner" class="env-banner"></div>
+
+  <section class="hero">
+    <h1>Meetings take attendance<br>by themselves.</h1>
+    <p class="lead">Connect a calendar once. Every new meeting gets its own QR code,
+      its own attendance sheet, and a live count — with nothing to set up by hand.</p>
+  </section>
+
+  <div class="path-grid">
+    <a class="card path-card viewfinder" href="admin.html">
+      <span class="vf-tr"></span><span class="vf-br"></span>
+      <div class="icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="7" rx="1.5" stroke="white" stroke-width="2"/><rect x="14" y="3" width="7" height="7" rx="1.5" stroke="white" stroke-width="2"/><rect x="3" y="14" width="7" height="7" rx="1.5" stroke="white" stroke-width="2"/><path d="M14 14h3v3h-3zM18 18h3v3h-3z" stroke="white" stroke-width="2"/></svg>
+      </div>
+      <h3>Organizer dashboard</h3>
+      <p>Sync your calendar, display a meeting's QR code, and watch attendance fill in live.</p>
+      <p style="margin-top:14px;color:var(--blue);font-weight:600;font-size:13.5px;">Open dashboard →</p>
+    </a>
+
+    <a class="card path-card viewfinder" href="portal.html">
+      <span class="vf-tr"></span><span class="vf-br"></span>
+      <div class="icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 7V4h3M20 7V4h-3M4 17v3h3M20 17v3h-3" stroke="white" stroke-width="2" stroke-linecap="round"/><rect x="9" y="9" width="6" height="6" rx="1" stroke="white" stroke-width="2"/></svg>
+      </div>
+      <h3>I'm here to check in</h3>
+      <p>Scan the QR code on display, or enter the short meeting code if scanning isn't possible.</p>
+      <p style="margin-top:14px;color:var(--blue);font-weight:600;font-size:13.5px;">Open check-in →</p>
+    </a>
+  </div>
+
+  <div class="card" style="margin-top:20px;">
+    <div class="card-title">How it works</div>
+    <div class="card-sub">No manual setup after a meeting is created.</div>
+    <div class="grid-3">
+      <div>
+        <div class="badge badge-muted" style="margin-bottom:10px;">Step 1</div>
+        <p><strong style="color:var(--ink)">Calendar sync.</strong> A new event appears on the connected calendar and the system picks it up automatically.</p>
+      </div>
+      <div>
+        <div class="badge badge-muted" style="margin-bottom:10px;">Step 2</div>
+        <p><strong style="color:var(--ink)">Sheet + QR generated.</strong> Everyone from the master participant list is added, marked Absent, and a secure QR code is issued.</p>
+      </div>
+      <div>
+        <div class="badge badge-muted" style="margin-bottom:10px;">Step 3</div>
+        <p><strong style="color:var(--ink)">Live check-in.</strong> Participants scan in, the dashboard updates instantly, and reports are ready the moment the meeting ends.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer-note">Built for organizations, universities, churches, NGOs and training institutions · <a href="README.html" style="color:var(--blue);font-weight:600;">Setup &amp; deployment notes</a></div>
+</div>
+
+<script src="js/store.js"></script>
+<script src="js/ui.js"></script>
+</body>
+</html>

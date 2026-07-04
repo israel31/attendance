@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Organizer Dashboard — Attendance QR</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<div class="wrap">
+  <div class="topbar">
+    <a class="brand" href="index.html"><span class="mark"></span> Attendance&nbsp;QR</a>
+    <div class="mode-toggle">
+      <button data-mode="demo">Demo Mode</button>
+      <button data-mode="production">Production</button>
+    </div>
+  </div>
+
+  <div id="env-banner" class="env-banner"></div>
+
+  <div class="grid-2" style="grid-template-columns:1fr 1.6fr;align-items:start;">
+    <div>
+      <div class="card">
+        <div class="card-title">Calendar</div>
+        <div class="card-sub">Meetings appear here the moment they're created.</div>
+        <button class="btn btn-primary btn-block" id="sync-calendar-btn">Sync calendar now</button>
+        <button class="btn btn-ghost btn-block" id="instant-meeting-btn" style="margin-top:10px;">Start instant meeting</button>
+      </div>
+
+      <div id="meeting-list"></div>
+
+      <div class="card" style="margin-top:18px;">
+        <div class="card-title" style="font-size:13px;">Demo controls</div>
+        <p style="font-size:12.5px;margin-bottom:12px;">Reset everything back to the sample organization.</p>
+        <button class="btn btn-danger btn-block" id="reset-demo-btn" style="font-size:13px;">Reset demo data</button>
+      </div>
+    </div>
+
+    <div id="dashboard-panel"></div>
+  </div>
+
+  <div class="footer-note">Master participant list: 12 sample staff · <a href="README.html" style="color:var(--blue);font-weight:600;">Setup notes</a></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="js/store.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/admin.js"></script>
+</body>
+</html>
