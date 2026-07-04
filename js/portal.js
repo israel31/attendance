@@ -68,7 +68,7 @@ function handleScanResult(decodedText) {
     const url = new URL(decodedText);
     const meetingId = url.searchParams.get('m');
     const token = url.searchParams.get('t');
-    resolveMeeting(meetingId, token, null);
+    resolveMeeting(meetingId, token);
   } catch (e) {
     showError('That QR code isn\u2019t recognized. Try the meeting code instead.');
   }
@@ -95,7 +95,7 @@ function showCodeEntry() {
   function submit() {
     const meeting = Store.getMeetingByCode(input.value.trim());
     if (!meeting) { toast('That code doesn\u2019t match a meeting.', 'bad'); return; }
-    resolveMeeting(meeting.id, meeting.token, null);
+    resolveMeeting(meeting.id, meeting.token);
   }
 }
 
