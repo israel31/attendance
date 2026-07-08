@@ -1,25 +1,24 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Check In — Attendance QR</title>
-<link rel="stylesheet" href="css/styles.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Check In — Attendance Portal</title>
+  <link rel="stylesheet" href="css/styles.css">
 </head>
-<body>
+<body class="portal-body">
+  <header class="portal-header">
+    <h1>Meeting Check-In</h1>
+    <p>Scan the QR code or enter your meeting code</p>
+  </header>
 
-<div class="wrap" style="max-width:480px;">
-  <div class="topbar">
-    <a class="brand" href="index.html"><span class="mark"></span> Attendance&nbsp;QR</a>
-  </div>
-  <div id="env-banner" class="env-banner"></div>
-  <div id="screen"></div>
-  <div class="footer-note">Your ID is only used to match you against the participant list.</div>
-</div>
+  <main class="portal-main">
+    <div id="screen" class="portal-screen"></div>
+  </main>
 
-<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-<script src="js/store.js"></script>
-<script src="js/ui.js"></script>
-<script src="js/portal.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/portal.js"></script>
 </body>
 </html>

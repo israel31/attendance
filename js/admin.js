@@ -1,196 +1,295 @@
-/* admin.js — organizer dashboard */
-
 let activeMeetingId = null;
-let qrRenderer = null;
+let attendanceRows = [];
+let previousStatuses = {};
 
-function baseCheckInUrl() {
-  const path = location.pathname.replace(/index\.html$|admin\.html$/, '');
-  return `${location.origin}${path}portal.html`;
-}
-
-function meetingStateBadge(meeting) {
-  const s = Store.meetingWindowStatus(meeting);
-  if (s.state === 'open') return `<span class="badge badge-good"><span class="dot pulse"></span> Live</span>`;
-  if (s.state === 'upcoming') return `<span class="badge badge-warn">Upcoming</span>`;
-  return `<span class="badge badge-bad">Closed</span>`;
+function formatDateTime(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
 }
 
 function renderMeetingList() {
   const list = document.getElementById('meeting-list');
   const meetings = Store.getMeetings();
+
   if (!meetings.length) {
-    list.innerHTML = `<div class="empty">No meetings yet. Sync the calendar or start an instant meeting.</div>`;
+    list.innerHTML = '<li class="panel-empty" style="min-height:120px"><p>No meetings scheduled yet. Configure a sheet and click schedule.</p></li>';
     return;
   }
-  list.innerHTML = meetings.map(m => {
-    const active = m.id === activeMeetingId ? 'style="border-color:var(--blue);"' : '';
-    return `
-      <div class="card" style="padding:16px 18px;cursor:pointer;margin-top:10px;" ${active} data-id="${m.id}">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
-          <div>
-            <div style="font-weight:700;font-size:14.5px;">${m.title}</div>
-            <div style="font-size:12.5px;color:var(--ink-soft);margin-top:2px;">${fmtDateTime(m.start)} → ${fmtTime(m.end)} · ${m.location}</div>
-          </div>
-          ${meetingStateBadge(m)}
-        </div>
-      </div>`;
-  }).join('');
-  list.querySelectorAll('[data-id]').forEach(el => {
-    el.addEventListener('click', () => selectMeeting(el.dataset.id));
-  });
-}
 
-function selectMeeting(id) {
-  activeMeetingId = id;
-  renderMeetingList();
-  renderDashboard();
+  list.innerHTML = meetings.map(m => {
+    const window = Store.meetingWindowStatus(m);
+    const badgeClass = `badge-${window.state}`;
+    const badgeLabel = window.state;
+    const isActive = m.id === activeMeetingId ? ' active' : '';
+    const presentCount = m.id === activeMeetingId
+      ? attendanceRows.filter(r => r.status === 'Present' || r.status === 'Late').length
+      : null;
+
+    return `
+      <li class="meeting-item${isActive}" data-id="${escapeAttr(m.id)}" onclick="selectMeeting('${escapeAttr(m.id)}')">
+        <div class="title">${escapeHtml(m.title)}</div>
+        <div class="meta">
+          <span class="badge ${badgeClass}">${badgeLabel}</span>
+          <span class="meeting-code">${escapeHtml(m.meetingCode)}</span>
+          <span>${formatDateTime(m.start)}</span>
+          ${presentCount !== null ? `<span>${presentCount} checked in</span>` : ''}
+        </div>
+      </li>`;
+  }).join('');
 }
 
 function renderDashboard() {
   const panel = document.getElementById('dashboard-panel');
   const meeting = Store.getMeeting(activeMeetingId);
+
   if (!meeting) {
-    panel.innerHTML = `<div class="card"><div class="empty">Select a meeting on the left to display its QR code and live attendance.</div></div>`;
+    panel.innerHTML = `
+      <div class="panel-empty">
+        <div class="icon">📋</div>
+        <p>Select a meeting from the sidebar to view live attendance.</p>
+      </div>`;
     return;
   }
 
-  const state = Store.meetingWindowStatus(meeting);
-  const rows = Store.getAttendance(activeMeetingId);
-  const present = rows.filter(r => r.status === 'Present').length;
-  const late = rows.filter(r => r.status === 'Late').length;
-  const absent = rows.filter(r => r.status === 'Absent').length;
-  const pct = rows.length ? Math.round(((present + late) / rows.length) * 100) : 0;
-  const checkInUrl = `${baseCheckInUrl()}?m=${meeting.id}&t=${meeting.token}`;
+  const window = Store.meetingWindowStatus(meeting);
+  const present = attendanceRows.filter(r => r.status === 'Present').length;
+  const late = attendanceRows.filter(r => r.status === 'Late').length;
+  const absent = attendanceRows.filter(r => r.status === 'Absent').length;
+  const portalUrl = buildPortalUrl(meeting.id, meeting.meetingCode);
 
   panel.innerHTML = `
-    <div class="grid-2">
-      <div class="card viewfinder">
-        <span class="vf-tr"></span><span class="vf-br"></span>
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
-          <div>
-            <div class="card-title">${meeting.title}</div>
-            <div class="card-sub">${fmtDateTime(meeting.start)} — ${fmtTime(meeting.end)} · ${meeting.location}</div>
-          </div>
-          ${meetingStateBadge(meeting)}
-        </div>
-        <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap;margin-top:6px;">
-          <div class="qr-box"><div id="qr-canvas"></div></div>
-          <div style="flex:1;min-width:180px;">
-            <div style="font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:6px;">Or enter this code</div>
-            <div class="code-chip">${meeting.meetingCode}</div>
-            <p style="margin-top:14px;font-size:12.5px;">
-              ${state.state === 'open' ? 'Valid now. Closes automatically at meeting end.' :
-                state.state === 'upcoming' ? `Opens 15 minutes before start, at ${fmtTime(state.opensAt)}.` :
-                'This meeting is currently closed.'}
-            </p>
-            <button class="btn btn-ghost" style="margin-top:14px;font-size:12.5px;padding:9px 14px;" id="copy-link-btn">Copy check-in link</button>
-          </div>
+    <div class="meeting-header">
+      <div>
+        <h2>${escapeHtml(meeting.title)}</h2>
+        <div class="details">
+          <span class="badge badge-${window.state}">${window.state}</span>
+          &nbsp;·&nbsp; Code: <span class="meeting-code">${escapeHtml(meeting.meetingCode)}</span>
+          &nbsp;·&nbsp; ${formatDateTime(meeting.start)} – ${formatDateTime(meeting.end)}
+          ${meeting.location ? `&nbsp;·&nbsp; ${escapeHtml(meeting.location)}` : ''}
         </div>
       </div>
-
-      <div class="card">
-        <div class="card-title">Live status</div>
-        <div class="card-sub">Updates automatically — no refresh needed.</div>
-        <div class="grid-3" style="grid-template-columns:1fr 1fr;">
-          <div class="stat"><div class="num">${present + late}</div><div class="lbl">Present</div></div>
-          <div class="stat"><div class="num">${absent}</div><div class="lbl">Absent</div></div>
-          <div class="stat"><div class="num">${late}</div><div class="lbl">Late arrivals</div></div>
-          <div class="stat"><div class="num">${pct}%</div><div class="lbl">Complete</div></div>
-        </div>
-        <div class="divider"></div>
-        <div style="display:flex;gap:10px;">
-          <button class="btn btn-ghost btn-block" id="export-csv-btn" style="font-size:13px;">Export CSV</button>
-          <button class="btn btn-ghost btn-block" id="reset-meeting-btn" style="font-size:13px;">Reset check-ins</button>
-        </div>
+      <div class="meeting-actions" style="display:flex; gap:10px;">
+        <button class="btn btn-secondary" id="re-fetch-sheet-btn">Sync Sheet Roster</button>
+        <button class="btn btn-primary" id="download-report-btn">Download CSV Report</button>
       </div>
     </div>
 
-    <div class="card">
-      <div class="card-title">Attendance sheet</div>
-      <div class="card-sub">Auto-generated from the master participant list · everyone starts Absent.</div>
-      <table>
-        <thead><tr><th>Staff ID</th><th>Name</th><th>Department</th><th>Status</th><th>Check-in</th></tr></thead>
-        <tbody>
-          ${rows.map(r => `
-            <tr>
-              <td class="mono">${r.staffId}</td>
-              <td>${r.name}</td>
-              <td>${r.department}</td>
-              <td>${statusBadge(r.status)}</td>
-              <td>${fmtTime(r.checkInTime)}</td>
-            </tr>`).join('')}
+    <div class="qr-section">
+      <div id="qr-canvas"></div>
+      <div class="qr-info">
+        <h3>Participant Check-in QR</h3>
+        <p>Scan with any phone camera or open the portal link below.</p>
+        <p class="qr-url">${escapeHtml(portalUrl)}</p>
+      </div>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-card present"><div class="value">${present}</div><div class="label">Present</div></div>
+      <div class="stat-card late"><div class="value">${late}</div><div class="label">Late</div></div>
+      <div class="stat-card absent"><div class="value">${absent}</div><div class="label">Absent</div></div>
+      <div class="stat-card"><div class="value">${attendanceRows.length}</div><div class="label">Total</div></div>
+    </div>
+
+    <div class="grid-wrapper">
+      <table class="attendance-grid">
+        <thead>
+          <tr>
+            <th>Email</th>
+            <th>Name</th>
+            <th>Department</th>
+            <th>Status</th>
+            <th>Check-in Time</th>
+          </tr>
+        </thead>
+        <tbody id="attendance-tbody">
+          ${renderAttendanceRows()}
         </tbody>
       </table>
-    </div>
-  `;
+    </div>`;
 
-  renderQR(checkInUrl);
+  renderQRCode(portalUrl);
+}
 
-  document.getElementById('copy-link-btn').addEventListener('click', () => {
-    navigator.clipboard?.writeText(checkInUrl);
-    toast('Check-in link copied.', 'good');
+function renderAttendanceRows() {
+  return attendanceRows.map(r => {
+    const key = r.staffId;
+    const flashed = previousStatuses[key] && previousStatuses[key] !== r.status && r.status !== 'Absent';
+    const flashClass = flashed ? ' flash-update' : '';
+    previousStatuses[key] = r.status;
+
+    return `
+      <tr class="status-${r.status}${flashClass}" data-staff="${escapeAttr(r.staffId)}">
+        <td>${escapeHtml(r.staffId)}</td>
+        <td>${escapeHtml(r.name)}</td>
+        <td>${escapeHtml(r.department)}</td>
+        <td><span class="status-pill ${r.status}">${r.status}</span></td>
+        <td>${r.checkInTime ? formatDateTime(r.checkInTime) : '—'}</td>
+      </tr>`;
+  }).join('');
+}
+
+function buildPortalUrl(meetingId, code) {
+  const base = window.location.href.replace(/admin\.html.*$/, 'portal.html');
+  return `${base}?m=${encodeURIComponent(meetingId)}&t=${encodeURIComponent(code)}`;
+}
+
+function renderQRCode(url) {
+  const container = document.getElementById('qr-canvas');
+  if (!container || typeof QRCode === 'undefined') return;
+  container.innerHTML = '';
+  new QRCode(container, {
+    text: url,
+    width: 140,
+    height: 140,
+    colorDark: '#000000',
+    colorLight: '#ffffff',
+    correctLevel: QRCode.CorrectLevel.M
   });
-  document.getElementById('export-csv-btn').addEventListener('click', () => {
-    const { filename, content } = Store.toCSV(activeMeetingId);
-    downloadFile(filename, content);
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function escapeAttr(str) {
+  return String(str).replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  const syncBtn = document.getElementById('sync-calendar-btn');
+  const statusEl = document.getElementById('sync-status');
+  const urlInput = document.getElementById('sheet-url-input');
+  
+  const modal = document.getElementById('schedule-modal');
+
+  if (urlInput) urlInput.value = Store.getStoredSheetUrl();
+
+  document.getElementById('save-sheet-url-btn')?.addEventListener('click', async () => {
+    const rawUrl = urlInput.value.trim();
+    if (!rawUrl) { alert("Please enter a valid Google Sheet shared link."); return; }
+    try {
+      statusEl.textContent = 'Verifying sheet...';
+      await Store.fetchParticipantsFromGoogleSheet(rawUrl);
+      Store.setStoredSheetUrl(rawUrl);
+      statusEl.textContent = 'Sheet verified!';
+      setTimeout(() => { statusEl.textContent = ''; }, 3000);
+      if (activeMeetingId) selectMeeting(activeMeetingId);
+    } catch (err) {
+      alert("Verification Failed: " + err.message);
+      statusEl.textContent = 'Verification failed';
+    }
   });
-  document.getElementById('reset-meeting-btn').addEventListener('click', () => {
-    if (!confirm('Reset all check-ins for this meeting back to Absent?')) return;
-    const reset = Store.getAttendance(activeMeetingId).map(r => ({ ...r, status: 'Absent', checkInTime: null, deviceId: null }));
-    Store.saveAttendance(activeMeetingId, reset);
-    renderDashboard();
-    toast('Check-ins reset.', '');
+
+  syncBtn.addEventListener('click', async () => {
+    syncBtn.disabled = true;
+    statusEl.textContent = 'Refreshing list…';
+    try {
+      await Store.syncCalendar();
+      renderMeetingList();
+      statusEl.textContent = 'List Refreshed';
+      setTimeout(() => { statusEl.textContent = ''; }, 2000);
+    } catch (err) {
+      statusEl.textContent = 'Refresh failed';
+    } finally {
+      syncBtn.disabled = false;
+    }
   });
-}
 
-function statusBadge(status) {
-  if (status === 'Present') return `<span class="badge badge-good">Present</span>`;
-  if (status === 'Late') return `<span class="badge badge-warn">Late</span>`;
-  return `<span class="badge badge-bad">Absent</span>`;
-}
-
-function renderQR(text) {
-  const holder = document.getElementById('qr-canvas');
-  holder.innerHTML = '';
-  new QRCode(holder, { text, width: 168, height: 168, colorDark: '#0F1B33', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
-}
-
-function downloadFile(filename, content) {
-  const blob = new Blob([content], { type: 'text/csv' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = filename; a.click();
-  URL.revokeObjectURL(url);
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-  renderMeetingList();
-  renderDashboard();
-
-  document.getElementById('sync-calendar-btn').addEventListener('click', () => {
-    const m = Store.syncCalendar();
-    toast(`New event detected: "${m.title}". Sheet and QR created.`, 'good');
+  try {
+    await Store.syncCalendar();
     renderMeetingList();
-  });
+    const list = Store.getMeetings();
+    if (list.length > 0) selectMeeting(list[0].id);
+  } catch {
+    statusEl.textContent = 'Failed to load initial meetings.';
+  }
+
+  window.selectMeeting = async function (id) {
+    activeMeetingId = id;
+    renderMeetingList();
+
+    attendanceRows = await Store.getAttendance(id, false);
+    previousStatuses = {};
+    attendanceRows.forEach(r => { previousStatuses[r.staffId] = r.status; });
+    renderDashboard();
+
+    Store.listenToAttendanceUpdates(id, async () => {
+      attendanceRows = await Store.getAttendance(id, false);
+      renderDashboard();
+      renderMeetingList();
+    });
+  };
 
   document.getElementById('instant-meeting-btn').addEventListener('click', () => {
-    const title = prompt('Meeting title', 'Quick Meeting');
-    if (title === null) return;
-    const m = Store.createInstantMeeting(title);
-    toast('Instant meeting started — live now.', 'good');
-    selectMeeting(m.id);
+    const localNow = new Date();
+    localNow.setMinutes(localNow.getMinutes() - localNow.getTimezoneOffset());
+    document.getElementById('modal-start').value = localNow.toISOString().slice(0, 16);
+    
+    // Set default values for granular options
+    document.getElementById('modal-duration-hours').value = 1;
+    document.getElementById('modal-duration-minutes').value = 0;
+    
+    modal.classList.remove('hidden');
   });
 
-  document.getElementById('reset-demo-btn')?.addEventListener('click', () => {
-    if (!confirm('Reset all demo data back to sample state?')) return;
-    Store.resetDemoData();
-    activeMeetingId = null;
-    renderMeetingList();
-    renderDashboard();
-    toast('Demo data reset.', '');
+  document.getElementById('modal-cancel-btn').addEventListener('click', () => {
+    modal.classList.add('hidden');
   });
 
-  // Live updates: poll locally + listen cross-tab (e.g. participant portal open elsewhere)
-  setInterval(() => { renderMeetingList(); renderDashboard(); }, 2500);
-  window.addEventListener('storage', () => { renderMeetingList(); renderDashboard(); });
+  document.getElementById('modal-save-btn').addEventListener('click', async () => {
+    const title = document.getElementById('modal-title').value.trim();
+    const startVal = document.getElementById('modal-start').value;
+    
+    const inputHours = parseInt(document.getElementById('modal-duration-hours').value, 10) || 0;
+    const inputMinutes = parseInt(document.getElementById('modal-duration-minutes').value, 10) || 0;
+
+    if (!title) { alert("Please input a meeting title."); return; }
+    if (!startVal) { alert("Please specify a starting time execution window."); return; }
+    
+    const totalDurationMinutes = (inputHours * 60) + inputMinutes;
+    if (totalDurationMinutes <= 0) { alert("Please specify a duration greater than 0 minutes."); return; }
+
+    modal.classList.add('hidden');
+    statusEl.textContent = 'Scheduling meeting...';
+
+    const localMeeting = await Store.createScheduledMeeting(title, startVal, totalDurationMinutes);
+    if (localMeeting) {
+      document.getElementById('modal-title').value = '';
+      statusEl.textContent = 'Meeting Scheduled!';
+      await Store.syncCalendar();
+      renderMeetingList();
+      selectMeeting(localMeeting.id);
+    } else {
+      statusEl.textContent = 'Scheduling failed.';
+    }
+    setTimeout(() => { statusEl.textContent = ''; }, 3000);
+  });
+
+  document.addEventListener('click', async (e) => {
+    if (e.target && e.target.id === 'download-report-btn') {
+      if (!activeMeetingId) return;
+      const report = await Store.toCSV(activeMeetingId);
+      const blob = new Blob([report.content], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url; link.download = report.filename; link.click();
+      URL.revokeObjectURL(url);
+    }
+
+    if (e.target && e.target.id === 're-fetch-sheet-btn') {
+      if (!activeMeetingId) return;
+      const originalText = e.target.innerText;
+      e.target.innerText = "Syncing..."; e.target.disabled = true;
+      attendanceRows = await Store.getAttendance(activeMeetingId, true);
+      renderDashboard(); renderMeetingList();
+      e.target.innerText = originalText; e.target.disabled = false;
+    }
+  });
 });

@@ -3,11 +3,22 @@
 let html5QrCode = null;
 let pendingMeeting = null; // meeting object once identified via scan/code
 
-const screen = document.getElementById('screen');
+// Safety Fallback: Ensure calling toast() never throws a ReferenceError if ui.js fails
+const safeToast = (msg, kind) => {
+  if (typeof toast === 'function') {
+    toast(msg, kind);
+  } else {
+    alert(msg);
+  }
+};
 
 function showHome() {
   stopScanner();
   pendingMeeting = null;
+  
+  const screen = document.getElementById('screen');
+  if (!screen) return;
+
   screen.innerHTML = `
     <div class="card viewfinder" style="text-align:center;padding:40px 26px;">
       <span class="vf-tr"></span><span class="vf-br"></span>
@@ -21,11 +32,17 @@ function showHome() {
   document.getElementById('scan-btn').addEventListener('click', showScanner);
   document.getElementById('code-btn').addEventListener('click', showCodeEntry);
   document.getElementById('forget-btn')?.addEventListener('click', (e) => {
-    e.preventDefault(); Store.forgetDevice(); showHome(); toast('Device forgotten.', '');
+    e.preventDefault(); 
+    Store.forgetDevice(); 
+    showHome(); 
+    safeToast('Device forgotten.', '');
   });
 }
 
 function showScanner() {
+  const screen = document.getElementById('screen');
+  if (!screen) return;
+
   screen.innerHTML = `
     <div class="card">
       <div class="card-title">Point your camera at the QR code</div>
@@ -62,13 +79,28 @@ function stopScanner() {
   }
 }
 
-function handleScanResult(decodedText) {
+async function handleScanResult(decodedText) {
   stopScanner();
+  let meetingId = null;
+  let token = null;
+
   try {
-    const url = new URL(decodedText);
-    const meetingId = url.searchParams.get('m');
-    const token = url.searchParams.get('t');
-    resolveMeeting(meetingId, token);
+    if (decodedText.startsWith('http://') || decodedText.startsWith('https://')) {
+      const url = new URL(decodedText);
+      meetingId = url.searchParams.get('m');
+      token = url.searchParams.get('t');
+    } else {
+      const fallbackParams = new URLSearchParams(decodedText.split('?')[1] || decodedText);
+      meetingId = fallbackParams.get('m');
+      token = fallbackParams.get('t');
+    }
+
+    if (meetingId) {
+      await Store.getAttendance(meetingId);
+      await resolveMeeting(meetingId, token);
+    } else {
+      throw new Error("Invalid format");
+    }
   } catch (e) {
     showError('That QR code isn\u2019t recognized. Try the meeting code instead.');
   }
@@ -76,6 +108,9 @@ function handleScanResult(decodedText) {
 
 function showCodeEntry() {
   stopScanner();
+  const screen = document.getElementById('screen');
+  if (!screen) return;
+
   screen.innerHTML = `
     <div class="card">
       <div class="card-title">Enter the meeting code</div>
@@ -92,40 +127,55 @@ function showCodeEntry() {
   document.getElementById('submit-code-btn').addEventListener('click', submit);
   document.getElementById('back-btn').addEventListener('click', showHome);
 
-  function submit() {
-    const meeting = Store.getMeetingByCode(input.value.trim());
-    if (!meeting) { toast('That code doesn\u2019t match a meeting.', 'bad'); return; }
-    resolveMeeting(meeting.id, meeting.token);
+  async function submit() {
+    const meeting = await Store.loadMeetingByCode(input.value.trim());
+    if (!meeting) { safeToast('That code doesn\u2019t match a meeting.', 'bad'); return; }
+    await Store.getAttendance(meeting.id);
+    await resolveMeeting(meeting.id, meeting.meetingCode);
   }
 }
 
-function resolveMeeting(meetingId, token) {
-  const meeting = Store.getMeeting(meetingId);
-  if (!meeting || meeting.token !== token) {
+async function resolveMeeting(meetingId, token) {
+  const meeting = await Store.loadMeetingById(meetingId);
+  if (!meeting || meeting.meetingCode !== token) {
     showError('This meeting couldn\u2019t be verified.');
     return;
   }
   const state = Store.meetingWindowStatus(meeting);
-  if (state.state !== 'open') {
-    showError('This meeting is currently closed.', meeting);
+  if (state.state === 'upcoming') {
+    showError('Check-in is locked. It only opens 15 minutes before the meeting starts.', meeting);
+    return;
+  }
+  if (state.state === 'closed') {
+    showError('This meeting check-in window has closed.', meeting);
     return;
   }
   pendingMeeting = meeting;
 
   const device = Store.getDevice();
+  
+  if (device && (!device.email || !device.email.includes('@'))) {
+    Store.forgetDevice();
+    showIdentify();
+    return;
+  }
+
   if (device) {
-    attemptCheckIn(device.staffId);
+    attemptCheckIn(device.email || device.staffId);
   } else {
     showIdentify();
   }
 }
 
 function showIdentify() {
+  const screen = document.getElementById('screen');
+  if (!screen) return;
+
   screen.innerHTML = `
     <div class="card">
       <div class="card-title">Confirm it's you</div>
-      <div class="card-sub">Enter your Staff ID or email — just once. This device will remember you next time.</div>
-      <div class="field"><label>Staff ID or email</label><input id="ident-input" placeholder="S-1001 or you@org.com"></div>
+      <div class="card-sub">Enter your organizational Email address — just once. This device will remember you next time.</div>
+      <div class="field"><label>Email Address</label><input type="email" id="ident-input" placeholder="you@company.com"></div>
       <button class="btn btn-primary btn-block" id="ident-submit">Check in</button>
       <button class="btn btn-ghost btn-block" id="ident-back" style="margin-top:10px;">Back</button>
     </div>
@@ -136,33 +186,42 @@ function showIdentify() {
   document.getElementById('ident-submit').addEventListener('click', submit);
   document.getElementById('ident-back').addEventListener('click', showHome);
 
-  function submit() {
+  async function submit() {
     const val = input.value.trim();
     if (!val) return;
-    const participant = val.includes('@')
-      ? Store.findParticipant({ email: val })
-      : Store.findParticipant({ staffId: val });
-    if (!participant) { toast('We couldn\u2019t match that to the participant list.', 'bad'); return; }
-    attemptCheckIn(participant.staffId, participant.name);
+    
+    const participant = await Store.findParticipant({ email: val });
+    if (!participant) { safeToast('We couldn\u2019t match that email to the participant list.', 'bad'); return; }
+    
+    attemptCheckIn(participant.email, participant.name);
   }
 }
 
-function attemptCheckIn(staffId, name) {
+function attemptCheckIn(email, name) {
   const deviceId = getDeviceId();
-  const result = Store.checkIn({ meetingId: pendingMeeting.id, staffId, deviceId });
-  if (!result.ok) {
-    if (result.already) {
-      showSuccess(result.row, pendingMeeting, true);
-    } else {
-      showError(result.reason);
+  Store.checkIn({ meetingId: pendingMeeting.id, staffId: email, deviceId }).then((result) => {
+    if (!result.ok) {
+      if (result.already) {
+        showSuccess(result.row, pendingMeeting, true);
+      } else {
+        showError(result.reason);
+      }
+      return;
     }
-    return;
-  }
-  Store.rememberDevice({ staffId: result.row.staffId, name: name || result.row.name });
-  showSuccess(result.row, pendingMeeting, false);
+    Store.rememberDevice({ email: result.row.staffId, staffId: result.row.staffId, name: name || result.row.name });
+    showSuccess(result.row, pendingMeeting, false);
+  }).catch((err) => {
+    showError("An error occurred during verification.");
+  });
 }
 
 function showSuccess(row, meeting, wasAlready) {
+  const screen = document.getElementById('screen');
+  if (!screen) return;
+
+  // Simple clean fallback formatting for clock render
+  const checkInString = row.checkInTime ? new Date(row.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—';
+
   screen.innerHTML = `
     <div class="card viewfinder" style="text-align:center;padding:40px 26px;">
       <span class="vf-tr"></span><span class="vf-br"></span>
@@ -170,10 +229,10 @@ function showSuccess(row, meeting, wasAlready) {
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="#1FAA6D" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
       <h3 style="font-size:19px;">${wasAlready ? 'Already checked in' : 'Attendance recorded'}</h3>
-      <p style="margin-top:8px;">${meeting.title}</p>
-      <p style="margin-top:2px;">${fmtDateTime(meeting.start)}</p>
+      <p style="margin-top:8px;">${escapeHtml(meeting.title)}</p>
+      <p style="margin-top:2px;">${new Date(meeting.start).toLocaleString()}</p>
       <div class="divider"></div>
-      <p style="font-size:13px;">Recorded as <strong style="color:var(--ink)">${row.name}</strong> · ${row.status} · ${fmtTime(row.checkInTime)}</p>
+      <p style="font-size:13px;">Recorded as <strong style="color:var(--ink)">${escapeHtml(row.name)}</strong> · ${row.status} · ${checkInString}</p>
       <button class="btn btn-dark btn-block" id="done-btn" style="margin-top:22px;">Done</button>
     </div>
   `;
@@ -181,13 +240,16 @@ function showSuccess(row, meeting, wasAlready) {
 }
 
 function showError(message, meeting) {
+  const screen = document.getElementById('screen');
+  if (!screen) return;
+
   screen.innerHTML = `
     <div class="card" style="text-align:center;padding:40px 26px;">
       <div style="width:56px;height:56px;border-radius:50%;background:var(--bad-bg);display:flex;align-items:center;justify-content:center;margin:0 auto 18px;">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="#E14E4E" stroke-width="3" stroke-linecap="round"/></svg>
       </div>
       <h3 style="font-size:18px;">${message}</h3>
-      ${meeting ? `<p style="margin-top:8px;">${meeting.title}</p>` : ''}
+      ${meeting ? `<p style="margin-top:8px;">${escapeHtml(meeting.title)}</p>` : ''}
       <button class="btn btn-ghost btn-block" id="err-back" style="margin-top:22px;">Back</button>
     </div>
   `;
@@ -196,8 +258,15 @@ function showError(message, meeting) {
 
 function getDeviceId() {
   let id = localStorage.getItem('sqa_device_id');
-  if (!id) { id = Store.uuid(); localStorage.setItem('sqa_device_id', id); }
+  if (!id) { id = 'dev-' + Math.random().toString(36).substr(2, 12); localStorage.setItem('sqa_device_id', id); }
   return id;
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -205,7 +274,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const m = params.get('m');
   const t = params.get('t');
   if (m && t) {
-    resolveMeeting(m, t);
+    Store.getAttendance(m).then(() => resolveMeeting(m, t));
   } else {
     showHome();
   }
