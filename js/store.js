@@ -200,12 +200,22 @@ const Store = (() => {
     return { ok: true, row: { staffId: updated.staff_id, name: updated.name, department: updated.department, status: updated.status, checkInTime: updated.check_in_time }, meeting };
   }
 
-  async function findParticipant({ staffId, email }) {
-    const sheetUrl = getStoredSheetUrl();
-    if (!sheetUrl) return null;
-    const list = await fetchParticipantsFromGoogleSheet(sheetUrl);
-    const targetKey = String(email || staffId).toLowerCase().trim();
-    return list.find(p => p.email.toLowerCase().trim() === targetKey);
+  // FIXED: No longer accesses localstorage or Google Sheets. Checks Supabase cloud directly for that meeting!
+  async function findParticipantInMeeting({ meetingId, email }) {
+    const targetEmail = String(email).toLowerCase().trim();
+    const { data, error } = await supabaseClient
+      .from('attendance')
+      .select('*')
+      .eq('meeting_id', meetingId)
+      .eq('staff_id', targetEmail)
+      .maybeSingle();
+      
+    if (error || !data) return null;
+    return {
+      email: data.staff_id,
+      name: data.name,
+      department: data.department
+    };
   }
 
   async function loadMeetingById(meetingId) {
@@ -256,7 +266,7 @@ const Store = (() => {
 
   return {
     syncCalendar, createScheduledMeeting, getAttendance, listenToAttendanceUpdates, checkIn,
-    findParticipant, loadMeetingById, loadMeetingByCode, toCSV, meetingWindowStatus,
+    findParticipantInMeeting, loadMeetingById, loadMeetingByCode, toCSV, meetingWindowStatus,
     getMeetings: () => cachedMeetings, getMeeting: (id) => cachedMeetings.find(m => m.id === id),
     getStoredSheetUrl, setStoredSheetUrl, fetchParticipantsFromGoogleSheet,
     getDevice: () => {

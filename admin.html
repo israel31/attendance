@@ -5,17 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Attendance Dashboard</title>
   <link rel="stylesheet" href="css/styles.css">
-  <style>
-    .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
-    .modal-content { background: #fff; padding: 24px; border-radius: 12px; width: 350px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
-    .modal-field { margin-bottom: 14px; }
-    .modal-field label { display: block; font-size: 12px; font-weight: bold; margin-bottom: 4px; color: #333; }
-    .modal-field input { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
-    .duration-inputs { display: flex; gap: 10px; }
-    .duration-inputs div { flex: 1; }
-    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
-    .hidden { display: none !important; }
-  </style>
 </head>
 <body>
   <header class="app-header">
@@ -25,62 +14,79 @@
     </div>
     <div class="header-actions">
       <span id="sync-status" class="subtitle"></span>
-      <button class="btn btn-secondary" id="sync-calendar-btn">Refresh Dashboard List</button>
-      <button class="btn btn-primary" id="instant-meeting-btn">Schedule Local Meeting</button>
+      <button class="btn btn-secondary" id="sync-calendar-btn">
+        <span>🔄</span> Refresh List
+      </button>
+      <button class="btn btn-primary" id="instant-meeting-btn">
+        <span>📅</span> Schedule Local Meeting
+      </button>
     </div>
   </header>
 
   <div class="admin-layout">
+    
     <aside class="sidebar">
-      <div class="card" style="margin-bottom: 20px; padding: 16px;">
-        <p class="section-label" style="margin-top: 0; margin-bottom: 6px;">Google Sheet Configuration</p>
-        <p style="font-size: 11.5px; color: var(--ink-soft); margin-bottom: 10px; line-height: 1.4;">Paste your shared Google Sheet link below (Ensure link sharing is set to 'Anyone with the link'):</p>
-        <input type="text" id="sheet-url-input" placeholder="https://docs.google.com/spreadsheets/d/.../edit" style="width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 10px; font-size: 12.5px; box-sizing: border-box; background: var(--white);">
-        <button class="btn btn-secondary btn-block" id="save-sheet-url-btn" style="font-size: 12px; padding: 8px 0; border-radius: 8px;">Save & Validate Sheet</button>
+      <div class="card" style="margin-bottom: 24px;">
+        <p class="section-label">Google Sheet Link Configuration</p>
+        <p style="font-size: 13px; color: var(--muted); margin-bottom: 12px; line-height: 1.4;">
+          Paste your spreadsheet share link below (set access to 'Anyone with the link'):
+        </p>
+        <input type="text" id="sheet-url-input" placeholder="https://docs.google.com/spreadsheets/d/.../edit" style="margin-bottom: 12px;">
+        <button class="btn btn-secondary btn-block" id="save-sheet-url-btn">
+          Save & Validate Sheet
+        </button>
       </div>
 
       <p class="section-label">Active Meetings</p>
       <ul class="meeting-list" id="meeting-list">
-        <li class="loading"><div class="spinner"></div>Loading meetings…</li>
+        <li class="panel-empty" style="padding: 20px 0;">
+          <div class="spinner"></div>
+          <p style="margin-top: 8px; font-size: 13px;">Loading meetings…</p>
+        </li>
       </ul>
     </aside>
 
     <main class="main-panel" id="dashboard-panel">
       <div class="panel-empty">
         <div class="icon">📋</div>
-        <p>Select a meeting from the sidebar to view live attendance.</p>
+        <h3>No Meeting Selected</h3>
+        <p>Select an upcoming or open meeting from the sidebar list to monitor real-time check-ins.</p>
       </div>
     </main>
   </div>
 
-  <!-- MEETING SCHEDULER POPUP MODAL -->
   <div id="schedule-modal" class="modal hidden">
     <div class="modal-content">
-      <h3 style="margin-top: 0; margin-bottom: 15px;">Schedule Local Meeting</h3>
+      <h3 style="font-size: 18px; font-weight: 800; margin-bottom: 4px; color: var(--dark);">Schedule Local Meeting</h3>
+      <p style="font-size: 13px; color: var(--muted); margin-bottom: 20px;">Fill out the parameters below to save this meeting to the cloud table.</p>
+      
       <div class="modal-field">
         <label>Meeting Title</label>
-        <input type="text" id="modal-title" placeholder="Weekly Operations Briefing">
+        <input type="text" id="modal-title" placeholder="e.g., Weekly Operations Briefing">
       </div>
+      
       <div class="modal-field">
         <label>Start Date & Time</label>
         <input type="datetime-local" id="modal-start">
       </div>
+      
       <div class="modal-field">
         <label>Duration Window</label>
         <div class="duration-inputs">
           <div>
             <input type="number" id="modal-duration-hours" min="0" value="1" placeholder="Hours">
-            <span style="font-size: 11px; color: #666;">Hours</span>
+            <span style="font-size: 11px; font-weight: 600; color: var(--muted); display: block; margin-top: 4px;">Hours</span>
           </div>
           <div>
             <input type="number" id="modal-duration-minutes" min="0" max="59" value="0" placeholder="Mins">
-            <span style="font-size: 11px; color: #666;">Minutes</span>
+            <span style="font-size: 11px; font-weight: 600; color: var(--muted); display: block; margin-top: 4px;">Minutes</span>
           </div>
         </div>
       </div>
+      
       <div class="modal-actions">
-        <button class="btn btn-secondary" id="modal-cancel-btn" style="padding: 6px 12px;">Cancel</button>
-        <button class="btn btn-primary" id="modal-save-btn" style="padding: 6px 12px;">Schedule</button>
+        <button class="btn btn-ghost" id="modal-cancel-btn">Cancel</button>
+        <button class="btn btn-primary" id="modal-save-btn">Schedule Meeting</button>
       </div>
     </div>
   </div>

@@ -96,7 +96,6 @@ async function handleScanResult(decodedText) {
     }
 
     if (meetingId) {
-      await Store.getAttendance(meetingId);
       await resolveMeeting(meetingId, token);
     } else {
       throw new Error("Invalid format");
@@ -130,7 +129,6 @@ function showCodeEntry() {
   async function submit() {
     const meeting = await Store.loadMeetingByCode(input.value.trim());
     if (!meeting) { safeToast('That code doesn\u2019t match a meeting.', 'bad'); return; }
-    await Store.getAttendance(meeting.id);
     await resolveMeeting(meeting.id, meeting.meetingCode);
   }
 }
@@ -190,8 +188,9 @@ function showIdentify() {
     const val = input.value.trim();
     if (!val) return;
     
-    const participant = await Store.findParticipant({ email: val });
-    if (!participant) { safeToast('We couldn\u2019t match that email to the participant list.', 'bad'); return; }
+    // FIXED: Query Supabase using meeting context instead of reading Google Sheet locally
+    const participant = await Store.findParticipantInMeeting({ meetingId: pendingMeeting.id, email: val });
+    if (!participant) { safeToast('We couldn\u2019t match that email to the participant list for this meeting.', 'bad'); return; }
     
     attemptCheckIn(participant.email, participant.name);
   }
@@ -219,7 +218,6 @@ function showSuccess(row, meeting, wasAlready) {
   const screen = document.getElementById('screen');
   if (!screen) return;
 
-  // Simple clean fallback formatting for clock render
   const checkInString = row.checkInTime ? new Date(row.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—';
 
   screen.innerHTML = `
@@ -274,7 +272,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const m = params.get('m');
   const t = params.get('t');
   if (m && t) {
-    Store.getAttendance(m).then(() => resolveMeeting(m, t));
+    resolveMeeting(m, t);
   } else {
     showHome();
   }
